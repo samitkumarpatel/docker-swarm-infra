@@ -27,20 +27,25 @@ resource "aws_key_pair" "foo" {
   public_key = tls_private_key.foo.public_key_openssh
 }
 
-# Local copy of key_pair
-resource "local_file" "key" {
-  content  = tls_private_key.foo.private_key_pem
-  filename = "${aws_key_pair.foo.key_name}.pem"
-}
+# # Local copy of key_pair
+# resource "local_file" "key" {
+#   content  = tls_private_key.foo.private_key_pem
+#   filename = "${aws_key_pair.foo.key_name}.pem"
+# }
 
-resource "null_resource" "set_readonly" {
-  provisioner "local-exec" {
-    command = "chmod 400 ${local_file.key.filename}"
-  }
+# resource "null_resource" "set_readonly" {
+#   provisioner "local-exec" {
+#     command = "chmod 400 ${local_file.key.filename}"
+#   }
 
-  triggers = {
-    key_file = local_file.key.filename
-  }
+#   triggers = {
+#     key_file = local_file.key.filename
+#   }
+# }
+
+output "ssh_key" {
+  value = tls_private_key.foo.private_key_pem
+  sensitive = true
 }
 
 resource "aws_security_group" "manager_sg" {
@@ -144,6 +149,6 @@ resource "ansible_host" "worker" {
     ansible_user                 = "ubuntu"
     ansible_ssh_private_key_file = "id_rsa.pem"
     ansible_connection           = "ssh"
-    ansible_ssh_common_args      = "-o StrictHostKeyChecking=no"
+    ansible_ssh_common_args      = "-o StrictHostKeyChecking=no -o ProxyCommand='ssh -W %h:%p -q ubuntu@${aws_instance.manager.public_ip} -i id_rsa.pem'"
   }
 }
