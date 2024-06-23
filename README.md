@@ -1,1 +1,1 @@
-# all-in-one-swarm-infra
+# docker-swarm-infra
