@@ -1,0 +1,43 @@
+---
+- name: Run Terraform and Python scripts, then execute Ansible playbook
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Run terraform output -json
+      shell: terraform output -json > terraform_output.json
+      args:
+        chdir: /home/ubuntu/Desktop/test
+      register: terraform_output
+
+    - name: Print terraform output log
+      debug:
+        var: terraform_output.stdout_lines
+
+    - name: Run Python script to generate inventory
+      command: python3 generate_inventory.py
+      args:
+        chdir: /home/ubuntu/Desktop/test
+      register: python_output
+
+    - name: Print python script output log
+      debug:
+        var: python_output.stdout_lines
+
+    - name: Delete terraform_output.json
+      shell: rm terraform_output.json
+      register: delete_output
+
+    - name: Print deletion output log
+      debug:
+        var: delete_output.stdout_lines
+
+    - name: Execute Ansible playbook with generated inventory
+      command: ansible-playbook -i inventory.yml manager.yml
+      args:
+        chdir: /home/ubuntu/Desktop/test
+      register: ansible_output
+
+    - name: Print ansible playbook output log
+      debug:
+        var: ansible_output.stdout_lines

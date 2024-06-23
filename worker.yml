@@ -1,0 +1,57 @@
+---
+- name: Install Docker and Docker Swarm on Worker Node
+  hosts: worker
+  become: yes
+  tasks:
+    - name: Update the apt package index
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install packages to allow apt to use a repository over HTTPS
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+
+    - name: Add an apt signing key for docker
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+  
+    - name: Add docker repository into sources list
+      ansible.builtin.apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        state: present
+  
+    - name: Update cache & Install docker
+      ansible.builtin.apt:
+        update_cache: yes
+        state: present
+        pkg:
+          - docker-ce
+  
+    - name: Ensure Docker service is enabled and started
+      ansible.builtin.service:
+        state: started
+        name: docker    
+        enabled: yes
+
+    - name: Add user to the docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Fetch worker join command
+      fetch:
+        src: /tmp/worker_join_command.sh
+        dest: /tmp/worker_join_command.sh
+        flat: yes
+      register: worker_token_fetched
+
+    - name: Join the Docker Swarm
+      shell: sh /tmp/worker_join_command.sh
+      when: worker_token_fetched is succeeded
