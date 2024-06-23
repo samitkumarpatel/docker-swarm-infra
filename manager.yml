@@ -7,17 +7,17 @@
     - name: Run terraform output -json
       shell: terraform output -json > terraform_output.json
       args:
-        chdir: /home/ubuntu/Desktop/test
+        chdir: /home/ubuntu/Desktop/docker-swarm-infra
 
     - name: Run Python script to generate inventory
       command: python3 generate_inventory.py
       args:
-        chdir: /home/ubuntu/Desktop/test
+        chdir: /home/ubuntu/Desktop/docker-swarm-infra
 
     - name: Remove terraform_output.json
       shell: rm terraform_output.json
       args:
-        chdir: /home/ubuntu/Desktop/test    
+        chdir: /home/ubuntu/Desktop/docker-swarm-infra    
 
 - name: Install Docker and Docker Swarm on Manager Node
   hosts: manager
