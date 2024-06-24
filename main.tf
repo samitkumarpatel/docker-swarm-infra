@@ -27,22 +27,6 @@ resource "aws_key_pair" "foo" {
   public_key = tls_private_key.foo.public_key_openssh
 }
 
-# # Local copy of key_pair
-# resource "local_file" "key" {
-#   content  = tls_private_key.foo.private_key_pem
-#   filename = "${aws_key_pair.foo.key_name}.pem"
-# }
-
-# resource "null_resource" "set_readonly" {
-#   provisioner "local-exec" {
-#     command = "chmod 400 ${local_file.key.filename}"
-#   }
-
-#   triggers = {
-#     key_file = local_file.key.filename
-#   }
-# }
-
 output "ssh_key" {
   value = tls_private_key.foo.private_key_pem
   sensitive = true
@@ -68,6 +52,13 @@ resource "aws_security_group" "manager_sg" {
   ingress {
     from_port   = 443
     to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 2377
+    to_port     = 2377
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -129,7 +120,7 @@ output "worker_public_ips" {
   value = aws_instance.worker[*].public_ip
 }
 
-# ansible ansible-inventory -i ansible/inventory.yml --list (show the inventory) 
+# ansible ansible-inventory -i inventory.yml --list (show the inventory)
 resource "ansible_host" "manager" {
   name   = aws_instance.manager.public_ip
   groups = ["manager"]
