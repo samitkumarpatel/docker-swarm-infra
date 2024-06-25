@@ -1,20 +1,8 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.41"
-    }
-
-    ansible = {
-      version = "~> 1.3.0"
-      source  = "ansible/ansible"
-    }
-  }
+locals {
   
-}
-
-provider "aws" {
-  region = "eu-north-1"
+  tags = {
+    Name = "swarm-infra"
+  }
 }
 
 resource "tls_private_key" "foo" {
@@ -32,8 +20,8 @@ output "ssh_key" {
   sensitive = true
 }
 
-resource "aws_security_group" "manager_sg" {
-  name = "manager_sg"
+resource "aws_security_group" "master_sg" {
+  name = "master_sg"
 
   ingress {
     from_port   = 22
@@ -78,7 +66,7 @@ resource "aws_security_group" "worker_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["${aws_instance.manager.public_ip}/32"]
+    cidr_blocks = ["${aws_instance.master.public_ip}/32"]
   }
 
   egress {
@@ -89,14 +77,14 @@ resource "aws_security_group" "worker_sg" {
   }
 }
 
-resource "aws_instance" "manager" {
+resource "aws_instance" "master" {
   ami           = "ami-0014ce3e52359afbd"
   instance_type = "t3.micro"
-  security_groups = [aws_security_group.manager_sg.name]
+  security_groups = [aws_security_group.master_sg.name]
   key_name = aws_key_pair.foo.key_name
 
   tags = {
-    Name = "Manager"
+    Name = "Master"
   }
 }
 
@@ -112,8 +100,8 @@ resource "aws_instance" "worker" {
   }
 }
 
-output "manager_public_ip" {
-  value = aws_instance.manager.public_ip
+output "master_public_ip" {
+  value = aws_instance.master.public_ip
 }
 
 output "worker_public_ips" {
@@ -121,14 +109,20 @@ output "worker_public_ips" {
 }
 
 # ansible ansible-inventory -i inventory.yml --list (show the inventory)
-resource "ansible_host" "manager" {
-  name   = aws_instance.manager.public_ip
-  groups = ["manager"]
+resource "ansible_host" "master" {
+  name   = aws_instance.master.public_ip
+  groups = ["master"]
   variables = {
     ansible_user                 = "ubuntu"
     ansible_ssh_private_key_file = "id_rsa.pem"
     ansible_connection           = "ssh"
     ansible_ssh_common_args      = "-o StrictHostKeyChecking=no"
+    mount_path                   = "/home/ubuntu/efs"
+    efs_endpoint                 = "${aws_efs_file_system.foo.dns_name}:/"
+    db_endpoint                  = aws_db_instance.db.endpoint
+    db_name                      = aws_db_instance.db.db_name
+    db_username                  = aws_db_instance.db.username
+    db_password                  = aws_db_instance.db.password
   }
 }
 
@@ -140,6 +134,12 @@ resource "ansible_host" "worker" {
     ansible_user                 = "ubuntu"
     ansible_ssh_private_key_file = "id_rsa.pem"
     ansible_connection           = "ssh"
-    ansible_ssh_common_args      = "-o StrictHostKeyChecking=no -o ProxyCommand='ssh -W %h:%p -q ubuntu@${aws_instance.manager.public_ip} -i id_rsa.pem'"
+    ansible_ssh_common_args      = "-o StrictHostKeyChecking=no -o ProxyCommand='ssh -W %h:%p -q ubuntu@${aws_instance.master.public_ip} -i id_rsa.pem'"
+    mount_path                   = "/home/ubuntu/efs"
+    efs_endpoint                 = "${aws_efs_file_system.foo.dns_name}:/"
+    db_endpoint                  = aws_db_instance.db.endpoint
+    db_name                      = aws_db_instance.db.db_name
+    db_username                  = aws_db_instance.db.username
+    db_password                  = aws_db_instance.db.password
   }
 }

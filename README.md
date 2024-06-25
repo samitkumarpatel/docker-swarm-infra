@@ -13,7 +13,7 @@ terraform plan
 terraform apply --auto-approve
 
 # Check how does inventory file looks like
-ansible-inventory -i inventory.yml --list --vars
+ansible-inventory -i ansible/inventory.yml --list --vars
 
 # Make ready ssh key to be used for ansible
 terraform output -raw ssh_key >> id_rsa.pem
@@ -23,3 +23,10 @@ chmod 400 id_rsa.pem
 ansible -i inventory.yml all -m ping
 ```
 > If the ping is success to all the host, then the way you want , you can decorate ansible-playbook and run via ansible! 
+
+# ansible module to parse terrform state file for dynamic inventory
+ansible-galaxy collection install cloud.terraform
+# overview inventory
+ansible-inventory -i ansible/inventory.yml --list --vars
+# playbook
+ubuntu in ~/Desktop/docker-swarm-infra on main λ ansible-playbook -i ansible/inventory.yml ansible/playbook.yml -e docker_registry_username=amitzrepo -e docker_registry_password=token-xyz
