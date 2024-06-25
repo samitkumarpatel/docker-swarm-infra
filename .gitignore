@@ -10,5 +10,4 @@ terraform.tfstate.backup
 .ansible
 **/.ansible/**
 **/id_rsa.pem%
-local.tf
-test.yml
+*local*

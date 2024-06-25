@@ -70,15 +70,15 @@
       when: swarm_init.rc == 0
       register: worker_join_token
 
+    - name: Set fact with join token
+      ansible.builtin.set_fact:
+        join_token: "docker swarm join --token {{ worker_join_token.stdout }} {{ ansible_host }}:2377"
+      when: worker_join_token.stdout is defined
+
     - name: Print token
       debug:
-        msg: docker swarm join --token {{ worker_join_token.stdout }} 13.49.223.35:2377
-      when: worker_join_token is defined
-
-    - name: Set fact with join token
-      set_fact:
-        join_token: "{{ worker_join_token.stdout }}"
-      when: worker_join_token.stdout is defined
+        msg: docker swarm join --token {{ worker_join_token.stdout }} {{ ansible_host }}:2377
+      when: worker_join_token is defined      
 
 - name: Join Docker Swarm as worker nodes
   hosts: worker
@@ -91,5 +91,5 @@
       ignore_errors: true
 
     - name: Join Docker Swarm as worker
-      shell: docker swarm join --token {{ worker_join_token.stdout }} 13.49.223.35:2377
-      when: hostvars['manager']['join_token'] is defined
+      ansible.builtin.shell:
+        cmd: "{{ hostvars[groups['manager'][0]]['join_token'] }}"
