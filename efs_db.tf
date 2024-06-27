@@ -30,7 +30,7 @@ resource "aws_security_group" "efs" {
 
 resource "aws_efs_mount_target" "foo" {
   file_system_id  = aws_efs_file_system.foo.id
-  subnet_id       = aws_default_subnet.default_az1.id
+  subnet_id       = aws_default_subnet.default_az1a.id
   security_groups = [aws_security_group.efs.id]
 }
 

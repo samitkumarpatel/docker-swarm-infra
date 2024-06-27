@@ -6,7 +6,7 @@ resource "aws_default_vpc" "default" {
 }
 
 # SUBNET
-resource "aws_default_subnet" "default_az1" {
+resource "aws_default_subnet" "default_az1a" {
   availability_zone = "eu-north-1a"
 
   tags = {
@@ -23,6 +23,6 @@ resource "aws_default_subnet" "default_az1b" {
 
 resource "aws_db_subnet_group" "foo" {
   name       = "db-subnet-groups"
-  subnet_ids = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az1b.id]
+  subnet_ids = [aws_default_subnet.default_az1a.id, aws_default_subnet.default_az1b.id]
   tags       = local.tags
 }

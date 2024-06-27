@@ -46,7 +46,7 @@
         append: yes
 
 - name: Initialize Docker Swarm master
-  hosts: manager
+  hosts: master
   remote_user: ubuntu
   become: true
   tasks:
@@ -61,18 +61,18 @@
         cmd: docker swarm join-token -q worker
       register: swarm_join_token
 
-    - name: Get manager IP
+    - name: Get master IP
       ansible.builtin.shell: 
         cmd: hostname -I | awk '{print $1}'
-      register: manager_private_ip
+      register: master_private_ip
     
     - name: debug
       ansible.builtin.debug:
-        msg: IP {{ manager_private_ip.stdout }} , TOKEN {{ swarm_join_token.stdout }}
+        msg: IP {{ master_private_ip.stdout }} , TOKEN {{ swarm_join_token.stdout }}
     
     - name: Set fact
       ansible.builtin.set_fact:
-        manager_private_ip: "{{ manager_private_ip.stdout }}"
+        master_private_ip: "{{ master_private_ip.stdout }}"
         swarm_join_token: "{{ swarm_join_token.stdout }}"
       delegate_facts: true
 
@@ -83,12 +83,12 @@
   tasks:
     - name: debug
       ansible.builtin.debug:
-        msg: manager_private_ip {{ hostvars[groups['manager'][0]]['manager_private_ip'] }},  swarm_join_token {{ hostvars[groups['manager'][0]]['swarm_join_token'] }}
-        #var: hostvars[groups['manager'][0]]['swarm_join_token']
+        msg: master_private_ip {{ hostvars[groups['master'][0]]['master_private_ip'] }},  swarm_join_token {{ hostvars[groups['master'][0]]['swarm_join_token'] }}
+        #var: hostvars[groups['master'][0]]['swarm_join_token']
     
     - name: Join Docker Swarm as a worker
       ansible.builtin.shell: 
-        cmd: docker swarm join --token {{ hostvars[groups['manager'][0]]['swarm_join_token'] }} {{ hostvars[groups['manager'][0]]['manager_private_ip'] }}:2377
+        cmd: docker swarm join --token {{ hostvars[groups['master'][0]]['swarm_join_token'] }} {{ hostvars[groups['master'][0]]['master_private_ip'] }}:2377
       register: swarm_join
       failed_when: "swarm_join.rc != 0 and 'This node is already part of a swarm' not in swarm_join.stderr"
 
@@ -120,7 +120,13 @@
         fstype: nfs4
         opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport
         state: mounted
-  
+
+- name: Setup EFS
+  hosts: master
+  remote_user: ubuntu
+  become: true
+  gather_facts: false
+  tasks:
     - name: Prepare & Copy docker-compose.yml
       ansible.builtin.template:
         src: docker-compose.yml.j2

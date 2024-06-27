@@ -29,4 +29,4 @@ ansible-galaxy collection install cloud.terraform
 # overview inventory
 ansible-inventory -i ansible/inventory.yml --list --vars
 # playbook
-ubuntu in ~/Desktop/docker-swarm-infra on main λ ansible-playbook -i ansible/inventory.yml ansible/playbook.yml -e docker_registry_username=amitzrepo -e docker_registry_password=token-xyz
+ansible-playbook -i ansible/inventory.yml ansible/playbook.yml -e docker_registry_username=amitzrepo -e docker_registry_password=token-xyz
