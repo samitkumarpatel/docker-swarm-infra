@@ -96,9 +96,8 @@
   hosts: all
   remote_user: ubuntu
   become: true
-  gather_facts: false
+  gather_facts: true
   vars:
-    deployment_version: 130620242108
     mount_directory: /home/ubuntu/efs
     app_directory: /home/ubuntu/app
   tasks:
@@ -121,11 +120,15 @@
         opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport
         state: mounted
 
-- name: Setup EFS
+- name: Run docker compose
   hosts: master
   remote_user: ubuntu
   become: true
   gather_facts: false
+  vars:
+    deployment_version: 130620242108
+    mount_directory: /home/ubuntu/efs
+    app_directory: /home/ubuntu/app
   tasks:
     - name: Prepare & Copy docker-compose.yml
       ansible.builtin.template:
