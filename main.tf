@@ -10,13 +10,33 @@ terraform {
       source  = "ansible/ansible"
     }
   }
-  
+}
+
+locals {
+  region        = "eu-north-1"
+  workers_count = 2
+  tags = {
+    infra = "docker-swarm"
+  }
 }
 
 provider "aws" {
-  region = "eu-north-1"
+  region = local.region
 }
 
+# VPC
+data "aws_vpc" "default_vpc" {}
+
+# SUBNET
+data "aws_subnet" "default_subnet_public" {
+  availability_zone = "${local.region}a"
+}
+
+data "aws_subnet" "default_subnet_private" {
+  availability_zone = "${local.region}b"
+}
+
+# RSA KEY PAIR
 resource "tls_private_key" "foo" {
   algorithm = "RSA"
   rsa_bits  = 2048
@@ -28,12 +48,13 @@ resource "aws_key_pair" "foo" {
 }
 
 output "ssh_key" {
-  value = tls_private_key.foo.private_key_pem
+  value     = tls_private_key.foo.private_key_pem
   sensitive = true
 }
 
 resource "aws_security_group" "manager_sg" {
-  name = "manager_sg"
+  name   = "manager_sg"
+  vpc_id = data.aws_vpc.default_vpc.id
 
   ingress {
     from_port   = 22
@@ -69,16 +90,20 @@ resource "aws_security_group" "manager_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = local.tags
 }
 
 resource "aws_security_group" "worker_sg" {
-  name = "worker_sg"
+  name   = "worker_sg"
+  vpc_id = data.aws_vpc.default_vpc.id
 
   ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["${aws_instance.manager.public_ip}/32"]
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    #security_groups = [aws_security_group.manager_sg.id]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -87,37 +112,43 @@ resource "aws_security_group" "worker_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = local.tags
 }
 
 resource "aws_instance" "manager" {
-  ami           = "ami-0014ce3e52359afbd"
-  instance_type = "t3.micro"
-  security_groups = [aws_security_group.manager_sg.name]
-  key_name = aws_key_pair.foo.key_name
+  ami                         = "ami-0014ce3e52359afbd"
+  instance_type               = "t3.micro"
+  security_groups             = [aws_security_group.manager_sg.name]
+  key_name                    = aws_key_pair.foo.key_name
+  subnet_id                   = data.aws_subnet.default_subnet_public.id
+  associate_public_ip_address = true
 
-  tags = {
-    Name = "Manager"
-  }
+  tags = merge(local.tags, { Name = "Manager" })
 }
 
 resource "aws_instance" "worker" {
-  count         = 2
-  ami           = "ami-0014ce3e52359afbd"
-  instance_type = "t3.micro"
-  security_groups = [aws_security_group.worker_sg.name]
-  key_name = aws_key_pair.foo.key_name
+  count                       = local.workers_count
+  ami                         = "ami-0014ce3e52359afbd"
+  instance_type               = "t3.micro"
+  security_groups             = [aws_security_group.worker_sg.name]
+  key_name                    = aws_key_pair.foo.key_name
+  subnet_id                   = data.aws_subnet.default_subnet_private.id
+  associate_public_ip_address = false
 
-  tags = {
-    Name = "Worker-${count.index + 1}"
-  }
+  tags = merge(local.tags, { Name = "Worker" })
 }
 
-output "manager_public_ip" {
+locals {
+  worker_ips = [for instance in aws_instance.worker : instance.private_ip]
+}
+
+output "worker_private_ips" {
+  value = [for instance in aws_instance.worker : instance.private_ip]
+}
+
+output "manager_ip" {
   value = aws_instance.manager.public_ip
-}
-
-output "worker_public_ips" {
-  value = aws_instance.worker[*].public_ip
 }
 
 # ansible ansible-inventory -i inventory.yml --list (show the inventory)
@@ -133,8 +164,8 @@ resource "ansible_host" "manager" {
 }
 
 resource "ansible_host" "worker" {
-  count  = 2
-  name   = aws_instance.worker[count.index].public_ip
+  count  = local.workers_count
+  name   = local.worker_ips[count.index]
   groups = ["worker"]
   variables = {
     ansible_user                 = "ubuntu"
