@@ -10,6 +10,11 @@ terraform {
       source  = "ansible/ansible"
     }
   }
+  backend "s3" {
+    bucket = "tfpocbucket001"
+    key    = "docker-swarm/terraform.tfstate"
+    region = "eu-north-1"
+  }
 }
 
 locals {
@@ -25,16 +30,57 @@ provider "aws" {
 }
 
 # VPC
-data "aws_vpc" "default_vpc" {}
+data "aws_vpc" "default" {
+  default = true
+}
 
 # SUBNET
-data "aws_subnet" "default_subnet_public" {
-  availability_zone = "${local.region}a"
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
-data "aws_subnet" "default_subnet_private" {
-  availability_zone = "${local.region}b"
+data "aws_subnet" "public" {
+  id = data.aws_subnets.default.ids[0]
 }
+
+data "aws_subnet" "private" {
+  id = data.aws_subnets.default.ids[1]
+}
+
+
+# # NAT Gateway
+# resource "aws_nat_gateway" "nat" {
+#   allocation_id = aws_eip.nat.id
+#   subnet_id     = data.aws_subnet.public.id
+
+#   tags = local.tags
+# }
+
+# # Route Table for private subnet
+# resource "aws_route_table" "private" {
+#   vpc_id = data.aws_vpc.default.id
+
+#   route {
+#     cidr_block = "0.0.0.0/0"
+#     gateway_id = aws_nat_gateway.nat.id
+#   }
+
+#   tags = local.tags
+# }
+
+# data "aws_route_table" "default" {
+#   vpc_id = data.aws_vpc.default.id
+# }
+
+# #subnet and route table association
+# resource "aws_route_table_association" "private" {
+#   subnet_id      = data.aws_subnet.private.id
+#   route_table_id = data.aws_route_table.default.id
+# }
+
 
 # RSA KEY PAIR
 resource "tls_private_key" "foo" {
@@ -54,7 +100,7 @@ output "ssh_key" {
 
 resource "aws_security_group" "manager_sg" {
   name   = "manager_sg"
-  vpc_id = data.aws_vpc.default_vpc.id
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
     from_port   = 22
@@ -96,14 +142,13 @@ resource "aws_security_group" "manager_sg" {
 
 resource "aws_security_group" "worker_sg" {
   name   = "worker_sg"
-  vpc_id = data.aws_vpc.default_vpc.id
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    #security_groups = [aws_security_group.manager_sg.id]
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port = 22
+    to_port   = 22
+    protocol  = "tcp"
+    cidr_blocks = [ data.aws_subnet.public.cidr_block]
   }
 
   egress {
@@ -117,24 +162,34 @@ resource "aws_security_group" "worker_sg" {
 }
 
 resource "aws_instance" "manager" {
+  depends_on                  = [aws_security_group.manager_sg]
   ami                         = "ami-0014ce3e52359afbd"
   instance_type               = "t3.micro"
-  security_groups             = [aws_security_group.manager_sg.name]
+  security_groups             = [aws_security_group.manager_sg.id]
   key_name                    = aws_key_pair.foo.key_name
-  subnet_id                   = data.aws_subnet.default_subnet_public.id
+  subnet_id                   = data.aws_subnet.public.id
   associate_public_ip_address = true
+
+  credit_specification {
+    cpu_credits = "unlimited"
+  }
 
   tags = merge(local.tags, { Name = "Manager" })
 }
 
 resource "aws_instance" "worker" {
+  depends_on                  = [aws_security_group.worker_sg]
   count                       = local.workers_count
   ami                         = "ami-0014ce3e52359afbd"
   instance_type               = "t3.micro"
-  security_groups             = [aws_security_group.worker_sg.name]
+  security_groups             = [aws_security_group.worker_sg.id]
   key_name                    = aws_key_pair.foo.key_name
-  subnet_id                   = data.aws_subnet.default_subnet_private.id
+  subnet_id                   = data.aws_subnet.private.id
   associate_public_ip_address = false
+
+  credit_specification {
+    cpu_credits = "unlimited"
+  }
 
   tags = merge(local.tags, { Name = "Worker" })
 }
@@ -151,6 +206,42 @@ output "manager_ip" {
   value = aws_instance.manager.public_ip
 }
 
+# EFS
+resource "aws_efs_file_system" "foo" {
+  creation_token   = "all-in-one-example"
+  performance_mode = "generalPurpose"
+  throughput_mode  = "bursting"
+  encrypted        = true
+
+  lifecycle_policy {
+    transition_to_ia = "AFTER_30_DAYS"
+  }
+
+  tags = local.tags
+}
+
+resource "aws_security_group" "efs_sg" {
+  name        = "efs-sg"
+  description = "ec2 talk to efs"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    from_port = 0
+    to_port   = 0
+    protocol  = "-1"
+    # ec2-sg
+    security_groups = [aws_security_group.manager_sg.id, aws_security_group.worker_sg.id]
+  }
+
+  tags = local.tags
+}
+
+resource "aws_efs_mount_target" "foo" {
+  file_system_id  = aws_efs_file_system.foo.id
+  subnet_id       = data.aws_subnet.public.id
+  security_groups = [aws_security_group.efs_sg.id]
+}
+
 # ansible ansible-inventory -i inventory.yml --list (show the inventory)
 resource "ansible_host" "manager" {
   name   = aws_instance.manager.public_ip
@@ -160,6 +251,8 @@ resource "ansible_host" "manager" {
     ansible_ssh_private_key_file = "id_rsa.pem"
     ansible_connection           = "ssh"
     ansible_ssh_common_args      = "-o StrictHostKeyChecking=no"
+    mount_path                   = "/home/ubuntu/efs"
+    efs_endpoint                 = "${aws_efs_file_system.foo.dns_name}:/"
   }
 }
 
@@ -172,5 +265,7 @@ resource "ansible_host" "worker" {
     ansible_ssh_private_key_file = "id_rsa.pem"
     ansible_connection           = "ssh"
     ansible_ssh_common_args      = "-o StrictHostKeyChecking=no -o ProxyCommand='ssh -W %h:%p -q ubuntu@${aws_instance.manager.public_ip} -i id_rsa.pem'"
+    mount_path                   = "/home/ubuntu/efs"
+    efs_endpoint                 = "${aws_efs_file_system.foo.dns_name}:/"
   }
 }
