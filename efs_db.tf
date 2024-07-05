@@ -21,8 +21,8 @@ resource "aws_security_group" "efs" {
     from_port = 0
     to_port   = 0
     protocol  = "-1"
-    # master-sg
-    security_groups = [aws_security_group.master_sg.id, aws_security_group.worker_sg.id]
+    # manager-sg
+    security_groups = [aws_security_group.manager_sg.id, aws_security_group.worker_sg.id]
   }
 
   tags = local.tags
@@ -45,7 +45,7 @@ resource "aws_security_group" "db" {
     to_port   = 0
     protocol  = "-1"
     # ec2-sg
-    security_groups = [aws_security_group.master_sg.id, aws_security_group.worker_sg.id]
+    security_groups = [aws_security_group.manager_sg.id, aws_security_group.worker_sg.id]
   }
 
   tags = local.tags

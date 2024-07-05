@@ -1,7 +1,7 @@
 # ansible ansible-inventory -i inventory.yml --list (show the inventory)
-resource "ansible_host" "master" {
-  name   = aws_instance.master.public_ip
-  groups = ["master"]
+resource "ansible_host" "manager" {
+  name   = aws_instance.manager.public_ip
+  groups = ["manager"]
   variables = {
     ansible_user                 = "ubuntu"
     ansible_ssh_private_key_file = "id_rsa.pem"
@@ -24,7 +24,7 @@ resource "ansible_host" "worker" {
     ansible_user                 = "ubuntu"
     ansible_ssh_private_key_file = "id_rsa.pem"
     ansible_connection           = "ssh"
-    ansible_ssh_common_args      = "-o StrictHostKeyChecking=no -o ProxyCommand='ssh -W %h:%p -q ubuntu@${aws_instance.master.public_ip} -i id_rsa.pem'"
+    ansible_ssh_common_args      = "-o StrictHostKeyChecking=no -o ProxyCommand='ssh -W %h:%p -q ubuntu@${aws_instance.manager.public_ip} -i id_rsa.pem'"
     mount_path                   = "/home/ubuntu/efs"
     efs_endpoint                 = "${aws_efs_file_system.foo.dns_name}:/"
     db_endpoint                  = aws_db_instance.db.endpoint

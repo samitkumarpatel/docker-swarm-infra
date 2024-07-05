@@ -45,8 +45,8 @@
         groups: docker
         append: yes
 
-- name: Initialize Docker Swarm master
-  hosts: master
+- name: Initialize Docker Swarm manager
+  hosts: manager
   remote_user: ubuntu
   become: true
   tasks:
@@ -61,18 +61,18 @@
         cmd: docker swarm join-token -q worker
       register: swarm_join_token
 
-    - name: Get master IP
+    - name: Get manager IP
       ansible.builtin.shell: 
         cmd: hostname -I | awk '{print $1}'
-      register: master_private_ip
+      register: manager_private_ip
     
     - name: debug
       ansible.builtin.debug:
-        msg: IP {{ master_private_ip.stdout }} , TOKEN {{ swarm_join_token.stdout }}
+        msg: IP {{ manager_private_ip.stdout }} , TOKEN {{ swarm_join_token.stdout }}
     
     - name: Set fact
       ansible.builtin.set_fact:
-        master_private_ip: "{{ master_private_ip.stdout }}"
+        manager_private_ip: "{{ manager_private_ip.stdout }}"
         swarm_join_token: "{{ swarm_join_token.stdout }}"
       delegate_facts: true
 
@@ -83,12 +83,12 @@
   tasks:
     - name: debug
       ansible.builtin.debug:
-        msg: master_private_ip {{ hostvars[groups['master'][0]]['master_private_ip'] }},  swarm_join_token {{ hostvars[groups['master'][0]]['swarm_join_token'] }}
-        #var: hostvars[groups['master'][0]]['swarm_join_token']
+        msg: manager_private_ip {{ hostvars[groups['manager'][0]]['manager_private_ip'] }},  swarm_join_token {{ hostvars[groups['manager'][0]]['swarm_join_token'] }}
+        #var: hostvars[groups['manager'][0]]['swarm_join_token']
     
     - name: Join Docker Swarm as a worker
       ansible.builtin.shell: 
-        cmd: docker swarm join --token {{ hostvars[groups['master'][0]]['swarm_join_token'] }} {{ hostvars[groups['master'][0]]['master_private_ip'] }}:2377
+        cmd: docker swarm join --token {{ hostvars[groups['manager'][0]]['swarm_join_token'] }} {{ hostvars[groups['manager'][0]]['manager_private_ip'] }}:2377
       register: swarm_join
       failed_when: "swarm_join.rc != 0 and 'This node is already part of a swarm' not in swarm_join.stderr"
 
@@ -121,7 +121,7 @@
         state: mounted
 
 - name: Run docker compose
-  hosts: master
+  hosts: manager
   remote_user: ubuntu
   become: true
   gather_facts: false
@@ -142,30 +142,30 @@
       ansible.builtin.shell: |
         docker login ghcr.io -u {{ docker_registry_username }} -p {{ docker_registry_password }}
 
-    - name: Docker Run
-      ansible.builtin.shell:
-        chdir: "{{ app_directory }}"
-        cmd: |
-          #stop first
-          docker compose -f docker-compose.yml down
-          # then run
-          docker compose -f docker-compose.yml up -d
+    # - name: Docker Run
+    #   ansible.builtin.shell:
+    #     chdir: "{{ app_directory }}"
+    #     cmd: |
+    #       #stop first
+    #       docker compose -f docker-compose.yml down
+    #       # then run
+    #       docker compose -f docker-compose.yml up -d
       
-    - name: Docker log
-      ansible.builtin.shell:
-        chdir: "{{ app_directory }}"
-        cmd: docker compose logs 
-      register: dockerlogs
+    # - name: Docker log
+    #   ansible.builtin.shell:
+    #     chdir: "{{ app_directory }}"
+    #     cmd: docker compose logs 
+    #   register: dockerlogs
   
-    - name: Print dockerlogs
-      ansible.builtin.debug:
-        msg: "{{ dockerlogs.stdout }}"
+    # - name: Print dockerlogs
+    #   ansible.builtin.debug:
+    #     msg: "{{ dockerlogs.stdout }}"
   
-    - name: Check that a /actuator/health endpoint of the applicatio return 200 http status code
-      ansible.builtin.uri:
-        url: http://localhost:8080/actuator/health
-        method: GET
-      register: _result
-      until: _result.status == 200
-      retries: 5
-      delay: 5
+    # - name: Check that a /actuator/health endpoint of the applicatio return 200 http status code
+    #   ansible.builtin.uri:
+    #     url: http://localhost:8080/actuator/health
+    #     method: GET
+    #   register: _result
+    #   until: _result.status == 200
+    #   retries: 5
+    #   delay: 5

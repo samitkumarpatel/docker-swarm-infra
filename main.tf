@@ -20,8 +20,8 @@ output "ssh_key" {
   sensitive = true
 }
 
-resource "aws_security_group" "master_sg" {
-  name = "master_sg"
+resource "aws_security_group" "manager_sg" {
+  name = "manager_sg"
 
   ingress {
     from_port   = 22
@@ -66,7 +66,7 @@ resource "aws_security_group" "worker_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["${aws_instance.master.public_ip}/32"]
+    cidr_blocks = ["${aws_instance.manager.public_ip}/32"]
   }
 
   egress {
@@ -77,14 +77,14 @@ resource "aws_security_group" "worker_sg" {
   }
 }
 
-resource "aws_instance" "master" {
+resource "aws_instance" "manager" {
   ami           = "ami-0014ce3e52359afbd"
   instance_type = "t3.micro"
-  security_groups = [aws_security_group.master_sg.name]
+  security_groups = [aws_security_group.manager_sg.name]
   key_name = aws_key_pair.foo.key_name
 
   tags = {
-    Name = "Master"
+    Name = "manager"
   }
 }
 
