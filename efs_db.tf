@@ -34,8 +34,7 @@ resource "aws_efs_mount_target" "foo" {
   security_groups = [aws_security_group.efs.id]
 }
 
-# Db
-
+# DB
 resource "aws_security_group" "db" {
   name        = "db-sg"
   description = "Allow ec2-sg will talk to this db"
