@@ -1,3 +1,8 @@
+output "ssh_key" {
+  value = tls_private_key.foo.private_key_pem
+  sensitive = true
+}
+
 output "manager_public_ip" {
   value = aws_instance.manager.public_ip
 }
@@ -13,3 +18,4 @@ output "efs_hostname" {
 output "db_endpoint" {
   value = aws_db_instance.db.endpoint
 }
+

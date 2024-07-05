@@ -15,11 +15,6 @@ resource "aws_key_pair" "foo" {
   public_key = tls_private_key.foo.public_key_openssh
 }
 
-output "ssh_key" {
-  value = tls_private_key.foo.private_key_pem
-  sensitive = true
-}
-
 resource "aws_security_group" "manager_sg" {
   name = "manager_sg"
 
@@ -84,7 +79,7 @@ resource "aws_instance" "manager" {
   key_name = aws_key_pair.foo.key_name
 
   tags = {
-    Name = "manager"
+    Name = "Manager"
   }
 }
 
