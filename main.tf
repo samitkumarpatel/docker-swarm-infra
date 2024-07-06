@@ -50,36 +50,37 @@ data "aws_subnet" "private" {
   id = data.aws_subnets.default.ids[1]
 }
 
+data "aws_route_table" "default_route_table" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
 
-# # NAT Gateway
-# resource "aws_nat_gateway" "nat" {
-#   allocation_id = aws_eip.nat.id
-#   subnet_id     = data.aws_subnet.public.id
 
-#   tags = local.tags
-# }
+# NAT Gateway
+resource "aws_eip" "private" {
+  domain = "vpc"
+}
+resource "aws_nat_gateway" "private" {
+  allocation_id = aws_eip.private.id
+  subnet_id     = data.aws_subnet.private.id
 
-# # Route Table for private subnet
-# resource "aws_route_table" "private" {
-#   vpc_id = data.aws_vpc.default.id
+  tags = local.tags
+}
 
-#   route {
-#     cidr_block = "0.0.0.0/0"
-#     gateway_id = aws_nat_gateway.nat.id
-#   }
+resource "aws_route" "private" {
+  route_table_id = data.aws_route_table.default_route_table.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id = aws_nat_gateway.private.id
+}
 
-#   tags = local.tags
-# }
-
-# data "aws_route_table" "default" {
-#   vpc_id = data.aws_vpc.default.id
-# }
-
-# #subnet and route table association
+# # Associate the route table with the private subnet
 # resource "aws_route_table_association" "private" {
 #   subnet_id      = data.aws_subnet.private.id
-#   route_table_id = data.aws_route_table.default.id
+#   route_table_id = aws_route_table.private.id
 # }
+
 
 
 # RSA KEY PAIR
@@ -145,10 +146,10 @@ resource "aws_security_group" "worker_sg" {
   vpc_id = data.aws_vpc.default.id
 
   ingress {
-    from_port = 22
-    to_port   = 22
-    protocol  = "tcp"
-    cidr_blocks = [ data.aws_subnet.public.cidr_block]
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_subnet.public.cidr_block]
   }
 
   egress {
