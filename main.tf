@@ -242,6 +242,50 @@ resource "aws_efs_mount_target" "foo" {
   security_groups = [aws_security_group.efs_sg.id]
 }
 
+# Db
+resource "aws_db_subnet_group" "db" {
+  name       = "db-subnet-groups"
+  subnet_ids = data.aws_subnets.default.ids
+  tags       = local.tags
+}
+
+resource "aws_security_group" "db" {
+  name        = "db-sg"
+  description = "Allow ec2-sg will talk to this db"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    from_port = 0
+    to_port   = 0
+    protocol  = "-1"
+    # ec2-sg's
+    security_groups = [aws_security_group.manager_sg.id, aws_security_group.worker_sg.id]
+  }
+
+  tags = local.tags
+}
+
+resource "random_password" "db" {
+  length           = 16
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+resource "aws_db_instance" "db" {
+  allocated_storage      = 10
+  db_name                = "postgres"
+  engine                 = "postgres"
+  engine_version         = "16.2"
+  instance_class         = "db.t3.micro"
+  username               = "postgres"
+  password               = random_password.db.result
+  skip_final_snapshot    = true
+  db_subnet_group_name   = aws_db_subnet_group.db.name
+  vpc_security_group_ids = [aws_security_group.db.id]
+
+  tags = local.tags
+}
+
 
 # ansible ansible-inventory -i inventory.yml --list (show the inventory)
 resource "ansible_host" "manager" {
@@ -254,6 +298,10 @@ resource "ansible_host" "manager" {
     ansible_ssh_common_args      = "-o StrictHostKeyChecking=no"
     mount_path                   = "/home/ubuntu/efs"
     efs_endpoint                 = "${aws_efs_file_system.foo.dns_name}:/"
+    db_endpoint                  = aws_db_instance.db.endpoint
+    db_name                      = aws_db_instance.db.db_name
+    db_username                  = aws_db_instance.db.username
+    db_password                  = aws_db_instance.db.password
   }
 }
 
@@ -268,5 +316,9 @@ resource "ansible_host" "worker" {
     ansible_ssh_common_args      = "-o StrictHostKeyChecking=no -o ProxyCommand='ssh -W %h:%p -q ubuntu@${aws_instance.manager.public_ip} -i id_rsa.pem'"
     mount_path                   = "/home/ubuntu/efs"
     efs_endpoint                 = "${aws_efs_file_system.foo.dns_name}:/"
+    db_endpoint                  = aws_db_instance.db.endpoint
+    db_name                      = aws_db_instance.db.db_name
+    db_username                  = aws_db_instance.db.username
+    db_password                  = aws_db_instance.db.password
   }
 }
