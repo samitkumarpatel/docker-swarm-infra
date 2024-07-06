@@ -17,6 +17,10 @@ terraform {
   }
 }
 
+provider "aws" {
+  region = local.region
+}
+
 locals {
   region        = "eu-north-1"
   workers_count = 2
@@ -25,16 +29,12 @@ locals {
   }
 }
 
-provider "aws" {
-  region = local.region
-}
-
-# VPC
+# default VPC
 data "aws_vpc" "default" {
   default = true
 }
 
-# SUBNET
+# default SUBNET
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
@@ -50,38 +50,34 @@ data "aws_subnet" "private" {
   id = data.aws_subnets.default.ids[1]
 }
 
-data "aws_route_table" "default_route_table" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-}
-
-
 # NAT Gateway
 resource "aws_eip" "private" {
   domain = "vpc"
 }
+
 resource "aws_nat_gateway" "private" {
   allocation_id = aws_eip.private.id
-  subnet_id     = data.aws_subnet.private.id
+  subnet_id     = data.aws_subnet.public.id
 
   tags = local.tags
 }
 
-resource "aws_route" "private" {
-  route_table_id = data.aws_route_table.default_route_table.id
-  destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id = aws_nat_gateway.private.id
+# Route Table
+resource "aws_route_table" "private" {
+  vpc_id = data.aws_vpc.default.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.private.id
+  }
+
+  tags = merge(local.tags, { Name = "private" })
 }
 
-# # Associate the route table with the private subnet
-# resource "aws_route_table_association" "private" {
-#   subnet_id      = data.aws_subnet.private.id
-#   route_table_id = aws_route_table.private.id
-# }
-
-
+resource "aws_route_table_association" "private" {
+  subnet_id      = data.aws_subnet.private.id
+  route_table_id = aws_route_table.private.id
+}
 
 # RSA KEY PAIR
 resource "tls_private_key" "foo" {
@@ -99,6 +95,7 @@ output "ssh_key" {
   sensitive = true
 }
 
+# Security Group
 resource "aws_security_group" "manager_sg" {
   name   = "manager_sg"
   vpc_id = data.aws_vpc.default.id
@@ -162,6 +159,7 @@ resource "aws_security_group" "worker_sg" {
   tags = local.tags
 }
 
+# ec2
 resource "aws_instance" "manager" {
   depends_on                  = [aws_security_group.manager_sg]
   ami                         = "ami-0014ce3e52359afbd"
@@ -238,10 +236,12 @@ resource "aws_security_group" "efs_sg" {
 }
 
 resource "aws_efs_mount_target" "foo" {
+  count           = length(data.aws_subnets.default.ids)
   file_system_id  = aws_efs_file_system.foo.id
-  subnet_id       = data.aws_subnet.public.id
+  subnet_id       = element(data.aws_subnets.default.ids, count.index)
   security_groups = [aws_security_group.efs_sg.id]
 }
+
 
 # ansible ansible-inventory -i inventory.yml --list (show the inventory)
 resource "ansible_host" "manager" {

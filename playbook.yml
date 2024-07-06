@@ -4,6 +4,8 @@
   remote_user: ubuntu
   become: true
   gather_facts: true
+  vars:
+    efs_mount_dir: /home/ubuntu/efs
   tasks:
     - name: Update cache & Install apt packages
       ansible.builtin.apt:
@@ -44,6 +46,21 @@
         name: "{{ ansible_user }}"
         groups: docker
         append: yes
+    - name: Ensure efs mount directory exists.
+      file:
+        path: "{{ efs_mount_dir }}"
+        state: directory
+        mode: 0755
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Ensure EFS volume is mounted.
+      mount:
+        name: "{{ efs_mount_dir }}"
+        src: "{{ hostvars[inventory_hostname].efs_endpoint }}"
+        fstype: nfs4
+        opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport
+        state: mounted
 
 - name: Initialize Docker Swarm master
   hosts: manager
