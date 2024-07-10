@@ -142,30 +142,30 @@
       ansible.builtin.shell: |
         docker login ghcr.io -u {{ docker_registry_username }} -p {{ docker_registry_password }}
 
-    # - name: Docker Run
-    #   ansible.builtin.shell:
-    #     chdir: "{{ app_directory }}"
-    #     cmd: |
-    #       #stop first
-    #       docker compose -f docker-compose.yml down
-    #       # then run
-    #       docker compose -f docker-compose.yml up -d
+    - name: Docker Run
+      ansible.builtin.shell:
+        chdir: "{{ app_directory }}"
+        cmd: |
+          #stop first
+          docker stack rm -f all-in-one
+          # then run
+          docker stack deploy -c docker-compose.yml all-in-one
       
-    # - name: Docker log
-    #   ansible.builtin.shell:
-    #     chdir: "{{ app_directory }}"
-    #     cmd: docker compose logs 
-    #   register: dockerlogs
+    - name: Docker log
+      ansible.builtin.shell:
+        chdir: "{{ app_directory }}"
+        cmd: docker compose logs 
+      register: dockerlogs
   
-    # - name: Print dockerlogs
-    #   ansible.builtin.debug:
-    #     msg: "{{ dockerlogs.stdout }}"
+    - name: Print dockerlogs
+      ansible.builtin.debug:
+        msg: "{{ dockerlogs.stdout }}"
   
-    # - name: Check that a /actuator/health endpoint of the applicatio return 200 http status code
-    #   ansible.builtin.uri:
-    #     url: http://localhost:8080/actuator/health
-    #     method: GET
-    #   register: _result
-    #   until: _result.status == 200
-    #   retries: 5
-    #   delay: 5
+    - name: Check that a /actuator/health endpoint of the applicatio return 200 http status code
+      ansible.builtin.uri:
+        url: http://localhost:8080/actuator/health
+        method: GET
+      register: _result
+      until: _result.status == 200
+      retries: 5
+      delay: 5
