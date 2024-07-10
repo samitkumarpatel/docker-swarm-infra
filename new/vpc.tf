@@ -164,7 +164,7 @@ resource "aws_instance" "manager" {
   depends_on                  = [aws_security_group.manager_sg]
   ami                         = "ami-0014ce3e52359afbd"
   instance_type               = "t3.micro"
-  vpc_security_group_ids      = [aws_security_group.manager_sg.id]
+  security_groups             = [aws_security_group.manager_sg.id]
   key_name                    = aws_key_pair.foo.key_name
   subnet_id                   = data.aws_subnet.public.id
   associate_public_ip_address = true
@@ -181,7 +181,7 @@ resource "aws_instance" "worker" {
   count                       = local.workers_count
   ami                         = "ami-0014ce3e52359afbd"
   instance_type               = "t3.micro"
-  vpc_security_group_ids      = [aws_security_group.worker_sg.id]
+  security_groups             = [aws_security_group.worker_sg.id]
   key_name                    = aws_key_pair.foo.key_name
   subnet_id                   = data.aws_subnet.private.id
   associate_public_ip_address = false
