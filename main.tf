@@ -166,7 +166,7 @@ resource "aws_security_group" "worker_sg" {
   tags = local.tags
 }
 
-resource "aws_network_interface" "public__ni" {
+resource "aws_network_interface" "public_ni" {
 
   subnet_id       = data.aws_subnet.public.id
   security_groups = [aws_security_group.manager_sg.id]
@@ -180,7 +180,7 @@ resource "aws_instance" "manager" {
   instance_type               = "t3.micro"
 
   network_interface {
-    network_interface_id = aws_network_interface.public__ni.id
+    network_interface_id = aws_network_interface.public_ni.id
     device_index         = 0
   }
 
@@ -194,7 +194,7 @@ resource "aws_instance" "manager" {
 }
 
 
-resource "aws_network_interface" "private__ni" {
+resource "aws_network_interface" "private_ni" {
 
   count                       = local.workers_count
 
@@ -212,7 +212,7 @@ resource "aws_instance" "worker" {
   #associate_public_ip_address = false
 
   network_interface {
-    network_interface_id = aws_network_interface.private__ni[count.index].id
+    network_interface_id = aws_network_interface.private_ni[count.index].id
     device_index         = 0
   }
 
