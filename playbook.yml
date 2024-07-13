@@ -6,6 +6,7 @@
   gather_facts: true
   vars:
     efs_mount_dir: /home/ubuntu/efs
+    app_directory: /home/ubuntu
   tasks:
     - name: Update cache & Install apt packages
       ansible.builtin.apt:
@@ -69,6 +70,9 @@
   vars:
     docker_registry_username: ""
     docker_registry_password: ""
+    efs_mount_dir: /home/ubuntu/efs
+    app_directory: /home/ubuntu
+    deployment_version: 130620242108
   tasks:
     - name: Initialize Docker Swarm
       ansible.builtin.shell: 
@@ -82,8 +86,17 @@
       register: swarm_join_token
     
     - name: Docker Login
-      ansible.builtin.shell: |
-        docker login ghcr.io -u {{ docker_registry_username }} -p {{ docker_registry_password }}
+      ansible.builtin.shell: 
+        cmd: |
+          docker login ghcr.io -u {{ docker_registry_username }} -p {{ docker_registry_password }}
+    
+    - name: Prepare & Copy docker-compose.yml
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ app_directory }}/docker-compose.yml"
+        mode: 0755
+        owner: ubuntu
+        group: ubuntu
     
     - name: Get manager IP
       ansible.builtin.shell: 

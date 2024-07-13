@@ -128,6 +128,13 @@ resource "aws_security_group" "manager_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 2375
+    to_port     = 2375
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -159,16 +166,26 @@ resource "aws_security_group" "worker_sg" {
   tags = local.tags
 }
 
+resource "aws_network_interface" "public__ni" {
+
+  subnet_id       = data.aws_subnet.public.id
+  security_groups = [aws_security_group.manager_sg.id]
+
+  tags = local.tags
+}
+
 # ec2
 resource "aws_instance" "manager" {
-  depends_on                  = [aws_security_group.manager_sg]
   ami                         = "ami-0014ce3e52359afbd"
   instance_type               = "t3.micro"
-  security_groups             = [aws_security_group.manager_sg.id]
-  key_name                    = aws_key_pair.foo.key_name
-  subnet_id                   = data.aws_subnet.public.id
-  associate_public_ip_address = true
 
+  network_interface {
+    network_interface_id = aws_network_interface.public__ni.id
+    device_index         = 0
+  }
+
+  key_name                    = aws_key_pair.foo.key_name
+ 
   credit_specification {
     cpu_credits = "unlimited"
   }
@@ -176,15 +193,28 @@ resource "aws_instance" "manager" {
   tags = merge(local.tags, { Name = "Manager" })
 }
 
+
+resource "aws_network_interface" "private__ni" {
+
+  count                       = local.workers_count
+
+  subnet_id       = data.aws_subnet.private.id
+  security_groups = [aws_security_group.worker_sg.id]
+
+  tags = local.tags
+}
+
 resource "aws_instance" "worker" {
-  depends_on                  = [aws_security_group.worker_sg]
   count                       = local.workers_count
   ami                         = "ami-0014ce3e52359afbd"
   instance_type               = "t3.micro"
-  security_groups             = [aws_security_group.worker_sg.id]
   key_name                    = aws_key_pair.foo.key_name
-  subnet_id                   = data.aws_subnet.private.id
-  associate_public_ip_address = false
+  #associate_public_ip_address = false
+
+  network_interface {
+    network_interface_id = aws_network_interface.private__ni[count.index].id
+    device_index         = 0
+  }
 
   credit_specification {
     cpu_credits = "unlimited"
