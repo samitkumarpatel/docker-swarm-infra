@@ -89,6 +89,7 @@
       ansible.builtin.shell: 
         cmd: |
           docker login ghcr.io -u {{ docker_registry_username }} -p {{ docker_registry_password }}
+      become_user: "{{ ansible_user }}"
     
     - name: Prepare & Copy docker-compose.yml
       ansible.builtin.template:
