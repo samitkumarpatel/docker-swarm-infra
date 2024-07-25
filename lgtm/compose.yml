@@ -34,13 +34,13 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=password
     volumes:
       - type: bind
-        source: ./grafana/datasources
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/grafana/datasources
         target: /etc/grafana/provisioning/datasources:ro
       - type: bind
-        source: ./grafana/dashboards
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/grafana/dashboards
         target: /etc/grafana/provisioning/dashboards:ro
       - type: bind
-        source: ./grafana/grafana.ini
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/grafana/grafana.ini
         target: /etc/grafana/grafana.ini:ro
       - type: volume
         source: grafana-data
@@ -55,7 +55,7 @@ services:
     hostname: ${HOST_NAME:-localhost}
     volumes:
       - type: bind
-        source: ./loki/loki.yml
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/loki/loki.yml
         target: /etc/config/loki.yml
     restart: unless-stopped
 
@@ -71,7 +71,7 @@ services:
     hostname: ${HOST_NAME:-localhost}
     volumes:
       - type: bind
-        source: ./prometheus/prometheus.yml
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/prometheus/prometheus.yml
         target: /etc/config/prometheus.yml
     restart: unless-stopped
 
@@ -86,12 +86,13 @@ services:
     hostname: ${HOST_NAME:-localhost}
     volumes:
       - type: bind
-        source: ./tempo/tempo.yml
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/tempo/tempo.yml
         target: /etc/tempo-config.yml
     restart: unless-stopped
 
   alloy:
     image: docker.io/grafana/alloy:v1.0.0
+    privileged: true
     command:
       - "run"
       - "--server.http.listen-addr=0.0.0.0:12345"
@@ -119,13 +120,12 @@ services:
         source: alloy-data
         target: /data-alloy
       - type: bind
-        source: ./alloy/config.alloy
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/alloy/config.alloy
         target: /etc/alloy/config.alloy
       - type: bind
         source: /var/run/docker.sock
         target: /var/run/docker.sock
     restart: unless-stopped
-
 volumes:
   alloy-data: { }
   grafana-data: { }
