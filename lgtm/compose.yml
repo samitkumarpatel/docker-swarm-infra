@@ -1,0 +1,132 @@
+services:
+
+  # Observability
+
+  postgres:
+    image: docker.io/library/postgres:16.2
+    depends_on:
+      - alloy
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=grafana
+    volumes:
+      - type: volume
+        source: postgres-data
+        target: /var/lib/postgresql/data
+    restart: unless-stopped
+
+  grafana:
+    image: docker.io/grafana/grafana-oss:11.0.0
+    depends_on:
+      - loki
+      - prometheus
+      - tempo
+    ports:
+      - "3000:3000"
+    hostname: ${HOST_NAME:-localhost}
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_DATABASE_USER=user
+      - GF_DATABASE_PASSWORD=password
+      - GF_SECURITY_ADMIN_USER=user
+      - GF_SECURITY_ADMIN_PASSWORD=password
+    volumes:
+      - type: bind
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/grafana/datasources
+        target: /etc/grafana/provisioning/datasources:ro
+      - type: bind
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/grafana/dashboards
+        target: /etc/grafana/provisioning/dashboards:ro
+      - type: bind
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/grafana/grafana.ini
+        target: /etc/grafana/grafana.ini:ro
+      - type: volume
+        source: grafana-data
+        target: /var/lib/grafana
+    restart: unless-stopped
+
+  loki:
+    image: docker.io/grafana/loki:2.9.7
+    command: -config.file=/etc/config/loki.yml
+    ports:
+      - "3100:3100"
+    hostname: ${HOST_NAME:-localhost}
+    volumes:
+      - type: bind
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/loki/loki.yml
+        target: /etc/config/loki.yml
+    restart: unless-stopped
+
+  prometheus:
+    image: quay.io/prometheus/prometheus:v2.51.2
+    command:
+      - "--config.file=/etc/config/prometheus.yml"
+      - "--enable-feature=otlp-write-receiver"
+      - "--enable-feature=exemplar-storage"
+      - "--web.enable-remote-write-receiver"
+    ports:
+      - "9090"
+    hostname: ${HOST_NAME:-localhost}
+    volumes:
+      - type: bind
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/prometheus/prometheus.yml
+        target: /etc/config/prometheus.yml
+    restart: unless-stopped
+
+  tempo:
+    image: docker.io/grafana/tempo:2.4.1
+    command: -config.file /etc/tempo-config.yml
+    ports:
+      - "3110"     # Tempo
+      - "4317"     # OTLP gRPC
+      - "4318"     # OTLP HTTP
+      - "9411"     # Zipkin
+    hostname: ${HOST_NAME:-localhost}
+    volumes:
+      - type: bind
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/tempo/tempo.yml
+        target: /etc/tempo-config.yml
+    restart: unless-stopped
+
+  alloy:
+    image: docker.io/grafana/alloy:v1.0.0
+    privileged: true
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/data-alloy"
+      - "--disable-reporting"
+      - "/etc/alloy/config.alloy"
+    depends_on:
+      - loki
+      - prometheus
+      - tempo
+    hostname: ${HOST_NAME:-localhost}
+    environment:
+      - ENVIRONMENT=dev
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - PROMETHEUS_URL=http://prometheus:9090/api/v1/write
+      - TEMPO_URL=http://tempo:4317
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "12345:12345"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - type: volume
+        source: alloy-data
+        target: /data-alloy
+      - type: bind
+        source: /home/samit/workspace/fullstack-e-learning/docker-swarm-infra/lgtm/alloy/config.alloy
+        target: /etc/alloy/config.alloy
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    restart: unless-stopped
+volumes:
+  alloy-data: { }
+  grafana-data: { }
+  postgres-data: { }

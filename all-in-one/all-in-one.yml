@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:14.1-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: all-in-one
+    ports:
+      - "5432"
+    networks:
+      - all-in-one
+
+  all-in-one:
+    image: ghcr.io/fullstack-e-learning/all-in-one:130620242108
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: jdbc:postgresql://db:5432/all-in-one
+      DB_USERNAME: user
+      DB_PASSWORD: secret
+      BASE_PATH: /workspace/photo
+    volumes:
+      - upload:/workspace/photo
+    networks:
+      - all-in-one
+    user: root:root
+    depends_on:
+      - db
+    deploy:
+      mode: replicated
+      replicas: 3
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 500M
+        reservations:
+          cpus: '0.25'
+          memory: 200M
+
+networks:
+  all-in-one:
+volumes:
+  upload: {}
