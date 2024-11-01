@@ -1,0 +1,171 @@
+---
+- name: Setup Docker Swarm
+  hosts: all
+  remote_user: ubuntu
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Update cache & Install apt packages
+      ansible.builtin.apt:
+        update_cache: yes
+        state: present
+        pkg:
+        - nfs-common
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - software-properties-common
+    
+    - name: Add an apt signing key for docker
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+    
+    - name: Add docker repository into sources list
+      ansible.builtin.apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        state: present
+    
+    - name: Update cache & Install docker
+      ansible.builtin.apt:
+        update_cache: yes
+        state: present
+        pkg:
+        - docker-ce
+    
+    - name: Ensure Docker service is enabled and started
+      ansible.builtin.systemd_service:
+        state: started
+        name: docker    
+        enabled: yes
+
+    - name: Add user to the docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+- name: Initialize Docker Swarm manager
+  hosts: manager
+  remote_user: ubuntu
+  become: true
+  tasks:
+    - name: Initialize Docker Swarm
+      ansible.builtin.shell: 
+        cmd: docker swarm init
+      register: swarm_init
+      failed_when: "swarm_init.rc != 0 and 'This node is already part of a swarm' not in swarm_init.stderr"
+
+    - name: Get Swarm join token
+      ansible.builtin.shell: 
+        cmd: docker swarm join-token -q worker
+      register: swarm_join_token
+
+    - name: Get manager IP
+      ansible.builtin.shell: 
+        cmd: hostname -I | awk '{print $1}'
+      register: manager_private_ip
+    
+    - name: debug
+      ansible.builtin.debug:
+        msg: IP {{ manager_private_ip.stdout }} , TOKEN {{ swarm_join_token.stdout }}
+    
+    - name: Set fact
+      ansible.builtin.set_fact:
+        manager_private_ip: "{{ manager_private_ip.stdout }}"
+        swarm_join_token: "{{ swarm_join_token.stdout }}"
+      delegate_facts: true
+
+- name: Join Swarm Worker
+  hosts: worker
+  remote_user: ubuntu
+  become: true
+  tasks:
+    - name: debug
+      ansible.builtin.debug:
+        msg: manager_private_ip {{ hostvars[groups['manager'][0]]['manager_private_ip'] }},  swarm_join_token {{ hostvars[groups['manager'][0]]['swarm_join_token'] }}
+        #var: hostvars[groups['manager'][0]]['swarm_join_token']
+    
+    - name: Join Docker Swarm as a worker
+      ansible.builtin.shell: 
+        cmd: docker swarm join --token {{ hostvars[groups['manager'][0]]['swarm_join_token'] }} {{ hostvars[groups['manager'][0]]['manager_private_ip'] }}:2377
+      register: swarm_join
+      failed_when: "swarm_join.rc != 0 and 'This node is already part of a swarm' not in swarm_join.stderr"
+
+- name: Setup EFS
+  hosts: all
+  remote_user: ubuntu
+  become: true
+  gather_facts: true
+  vars:
+    mount_directory: /home/ubuntu/efs
+    app_directory: /home/ubuntu/app
+  tasks:
+    - name: Ensure mount directory exists.
+      ansible.builtin.file:
+        path: "{{ item  }}"
+        state: directory
+        mode: 0755
+        owner: ubuntu
+        group: ubuntu
+      with_items:
+        - "{{ mount_directory }}"
+        - "{{ app_directory }}"
+
+    - name: Ensure EFS volume is mounted.
+      mount:
+        name: "{{ mount_directory }}"
+        src: "{{ hostvars[inventory_hostname].efs_endpoint }}"
+        fstype: nfs4
+        opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport
+        state: mounted
+
+- name: Run docker compose
+  hosts: manager
+  remote_user: ubuntu
+  become: true
+  gather_facts: false
+  vars:
+    deployment_version: 130620242108
+    mount_directory: /home/ubuntu/efs
+    app_directory: /home/ubuntu/app
+  tasks:
+    - name: Prepare & Copy docker-compose.yml
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ app_directory }}/docker-compose.yml"
+        mode: 0755
+        owner: ubuntu
+        group: ubuntu
+  
+    - name: Docker Login
+      ansible.builtin.shell: |
+        docker login ghcr.io -u {{ docker_registry_username }} -p {{ docker_registry_password }}
+
+    - name: Docker Run
+      ansible.builtin.shell:
+        chdir: "{{ app_directory }}"
+        cmd: |
+          #stop first
+          docker stack rm -f all-in-one
+          # then run
+          docker stack deploy -c docker-compose.yml all-in-one
+      
+    - name: Docker log
+      ansible.builtin.shell:
+        chdir: "{{ app_directory }}"
+        cmd: docker compose logs 
+      register: dockerlogs
+  
+    - name: Print dockerlogs
+      ansible.builtin.debug:
+        msg: "{{ dockerlogs.stdout }}"
+  
+    - name: Check that a /actuator/health endpoint of the applicatio return 200 http status code
+      ansible.builtin.uri:
+        url: http://localhost:8080/actuator/health
+        method: GET
+      register: _result
+      until: _result.status == 200
+      retries: 5
+      delay: 5
